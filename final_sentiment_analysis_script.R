@@ -17,7 +17,9 @@ library(wordcloud)
 library(SnowballC)
 library(RCurl)       
 library(rtweet)
-
+library(RTextTools)
+library(caTools)
+library(e1071)
 
 
 ######### MODULE 1 - Extracting Twitter Data #####################
@@ -60,7 +62,7 @@ write_as_csv(tweet.list.RaGa, "tweet_list_final_RaGa.csv")
 data <- read.csv("tweet_list_final_modi_v2.csv")
 
 ## Note - uncomment the below line of code for development purpose
-#data <- head(data,100)
+data <- head(data,100)
 data.text <- data$text
 data.text <- as.matrix(data.text)
 
@@ -131,4 +133,51 @@ td_new2<-td_new[1:8,]
 # Plotting the new sentiment
 plot(td_new2)
 
+## Preparing the data for machine learning algo
+## The data will be test and train at 80:20 ratio
 
+
+tweet.senti.df <- as.data.frame(tweet.senti)
+classification.df <- as.data.frame(d)
+
+data.model <- cbind(tweet.senti.df,classification.df)
+data.model <- data.model[,c(1,10:11)]
+names(data.model)[1] <- "tweet"
+
+data.model <- filter(data.model, tweet != "NA")
+
+data.model$sentiment <- (data.model$positive - data.model$negative)
+data.model <- data.model[,c(1,4)]
+
+data.model.pos <- filter(data.model, sentiment > 0)
+data.model.neg <- filter(data.model, sentiment < 0)
+
+data.model.pos$sentiment <- "positive"
+data.model.neg$sentiment <- "negative"
+
+## creating test train dataset
+
+sample = sample.split(data.model.pos$tweet, SplitRatio = .8)
+data.model.pos.train = subset(data.model.pos, sample == TRUE)
+data.model.pos.test  = subset(data.model.pos, sample == FALSE)
+
+sample = sample.split(data.model.neg$tweet, SplitRatio = .8)
+data.model.neg.train = subset(data.model.neg, sample == TRUE)
+data.model.neg.test  = subset(data.model.neg, sample == FALSE)
+  
+data.train <- rbind(data.model.pos.train,data.model.neg.train)
+data.test <- rbind(data.model.pos.test,data.model.neg.test)
+
+data.train$sentiment <- as.factor(data.train$sentiment)
+data.test$sentiment <- as.factor(data.test$sentiment)
+
+###Modelling Naive Bayes
+
+
+model <- naiveBayes(data.train$sentiment ~ data.train$tweet, data = data.train)
+
+pred <- predict(model,data.test)
+
+
+table(data.test$sentiment, pred)
+recall_accuracy(data.test$sentiment, pred)
